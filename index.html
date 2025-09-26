@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Segnapunti HEMA - CSEN</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Orbitron:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Roboto Condensed', sans-serif; overscroll-behavior: none; }
+        .timer-display { font-family: 'Orbitron', sans-serif; font-size: 5rem; transition: color 0.1s ease-in-out; }
+        .score-display { font-family: 'Orbitron', sans-serif; font-size: 8rem; }
+        .flashing-red { animation: red-flash 0.3s 10; }
+        @keyframes red-flash { 0%, 100% { background-color: #1f2937; } 50% { background-color: #dc2626; } }
+        .timer-flash { color: #9ca3af !important; }
+        input[type='number']::-webkit-outer-spin-button, input[type='number']::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type='number'] { -moz-appearance: textfield; }
+        .card-yellow { background-color: #facc15; }
+        .card-red { background-color: #ef4444; }
+        .card-count { position: absolute; top: -8px; right: -8px; background-color: #374151; color: white; border-radius: 9999px; width: 24px; height: 24px; font-size: 14px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 1px solid white; }
+        .btn-disabled { background-color: #b91c1c !important; cursor: not-allowed; }
+    </style>
+</head>
+<body class="bg-gray-800 text-white select-none">
+
+    <div id="main-menu-screen" class="min-h-screen flex flex-col items-center justify-center p-4">
+        <h1 class="text-5xl font-bold mb-2 text-center">Segnapunti HEMA - CSEN</h1>
+        <p class="text-gray-400 mb-12 text-center">Scegli la modalità di utilizzo</p>
+        <div class="w-full max-w-sm space-y-4">
+            <button onclick="showMatchScreen()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-lg text-xl shadow-lg transition-transform transform hover:scale-105">Incontro Singolo</button>
+            <button onclick="showTournamentScreen()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-4 rounded-lg text-xl shadow-lg transition-transform transform hover:scale-105">Gestisci Gara (Live)</button>
+            <button onclick="showSettingsScreen()" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg text-lg shadow-lg transition-transform transform hover:scale-105 mt-8">Impostazioni</button>
+        </div>
+        <div id="connection-status" class="mt-8 text-sm text-gray-500">Connecting to Firebase...</div>
+    </div>
+
+    <div id="match-screen" class="hidden min-h-screen flex flex-col p-2 md:p-4">
+        <div class="flex flex-col items-center justify-center bg-gray-900 p-4 rounded-lg shadow-xl mb-4">
+            <div id="match-info" class="text-xl font-bold text-yellow-300 mb-2"></div>
+            <div class="flex items-center justify-center w-full">
+                <div class="timer-display text-white cursor-pointer" onclick="toggleTimer()">00:00</div>
+            </div>
+            <div class="flex items-center space-x-4 mt-3">
+                <button onclick="adjustTime(-60)" class="font-bold py-2 px-5 rounded-lg bg-gray-700 hover:bg-gray-600 text-lg">-1 Min</button>
+                <button onclick="adjustTime(60)" class="font-bold py-2 px-5 rounded-lg bg-gray-700 hover:bg-gray-600 text-lg">+1 Min</button>
+            </div>
+            <div class="flex items-center space-x-4 mt-3">
+                <button onclick="assignPriority()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-5 rounded-lg shadow-md">Priorità</button>
+                <button onclick="addDoubleHit()" class="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-2 px-5 rounded-lg shadow-md">Doppio (<span id="double-hit-count">0</span>)</button>
+                <button onclick="resetMatch()" class="bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-5 rounded-lg shadow-md">Reset</button>
+            </div>
+        </div>
+        <div class="flex-grow grid grid-cols-2 gap-2 md:gap-4">
+            <div id="player-panel-1" class="bg-gray-700 rounded-lg flex flex-col items-center justify-between p-4 relative">
+                <div id="priority-display-1" class="absolute top-3 left-3 text-2xl font-bold bg-purple-600 rounded-full h-10 w-10 flex items-center justify-center shadow-lg hidden">P</div>
+                <h2 id="player1-name" class="text-2xl md:text-3xl font-bold text-center mb-4">Schermidore 1</h2>
+                <div id="score-display-1" class="score-display text-green-400 cursor-pointer" onclick="updateScore(1, 1)">0</div>
+                <button onclick="updateScore(1, -1)" class="w-full max-w-xs bg-gray-600 hover:bg-gray-500 text-white font-bold py-3 px-4 rounded-lg text-xl shadow-md mt-4">-1 Punto</button>
+                <div class="flex space-x-3 mt-auto pt-4">
+                    <button id="card-y-1" onclick="giveCard(1, 'yellow')" class="relative card-yellow text-black font-bold h-16 w-12 rounded-lg shadow-lg">G</button>
+                    <button id="card-r-1" onclick="giveCard(1, 'red')" class="relative card-red text-white font-bold h-16 w-12 rounded-lg shadow-lg">R</button>
+                </div>
+            </div>
+            <div id="player-panel-2" class="bg-gray-700 rounded-lg flex flex-col items-center justify-between p-4 relative">
+                 <div id="priority-display-2" class="absolute top-3 right-3 text-2xl font-bold bg-purple-600 rounded-full h-10 w-10 flex items-center justify-center shadow-lg hidden">P</div>
+                <h2 id="player2-name" class="text-2xl md:text-3xl font-bold text-center mb-4">Schermidore 2</h2>
+                <div id="score-display-2" class="score-display text-red-400 cursor-pointer" onclick="updateScore(2, 1)">0</div>
+                <button onclick="updateScore(2, -1)" class="w-full max-w-xs bg-gray-600 hover:bg-gray-500 text-white font-bold py-3 px-4 rounded-lg text-xl shadow-md mt-4">-1 Punto</button>
+                 <div class="flex space-x-3 mt-auto pt-4">
+                    <button id="card-y-2" onclick="giveCard(2, 'yellow')" class="relative card-yellow text-black font-bold h-16 w-12 rounded-lg shadow-lg">G</button>
+                    <button id="card-r-2" onclick="giveCard(2, 'red')" class="relative card-red text-white font-bold h-16 w-12 rounded-lg shadow-lg">R</button>
+                </div>
+            </div>
+        </div>
+         <div id="match-footer" class="mt-4">
+            <button onclick="backToMenu()" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg text-lg shadow-lg">Torna al Menu</button>
+         </div>
+    </div>
+    
+    <div id="last-action-overlay" class="hidden fixed inset-0 bg-yellow-400 bg-opacity-80 flex items-center justify-center z-50"><h1 class="text-6xl md:text-8xl font-bold text-black text-center animate-pulse">LAST ACTION</h1></div>
+    <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div class="bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-md text-center">
+            <h2 id="modal-title" class="text-3xl font-bold mb-4"></h2><p id="modal-body" class="text-lg mb-6"></p>
+            <button id="modal-close-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg">OK</button>
+        </div>
+    </div>
+
+    <div id="tournament-screen" class="hidden min-h-screen flex flex-col p-4 space-y-4">
+        <div class="flex justify-between items-center">
+            <h1 class="text-4xl font-bold text-center">Gestione Gara</h1>
+            <div class="text-right">
+                <p class="text-sm text-gray-400">ID Gara:</p>
+                <p id="tournament-id-display" class="font-mono text-lg"></p>
+            </div>
+        </div>
+        
+        <div id="player-setup-section" class="bg-gray-700 p-4 rounded-lg shadow-lg">
+            <h2 class="text-2xl font-bold mb-3">1. Aggiungi Schermidori</h2>
+            <div class="flex flex-col sm:flex-row gap-2 mb-3">
+                <input type="text" id="new-player-name" class="flex-grow bg-gray-800 rounded-md p-2 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Nome schermidore...">
+                <button onclick="addPlayer()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md shadow-md">Aggiungi</button>
+            </div>
+            <div id="player-list" class="space-y-2"></div>
+            <button onclick="startTournament()" class="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md shadow-md">Avvia Gara e Genera Gironi</button>
+        </div>
+        
+        <div id="poules-section" class="bg-gray-700 p-4 rounded-lg shadow-lg hidden">
+             <h2 class="text-2xl font-bold mb-3">2. Fase a Gironi</h2>
+             <div id="poules-container" class="space-y-4"></div>
+             <button id="start-elimination-btn" onclick="startElimination()" class="w-full mt-4 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md shadow-md hidden">Calcola Classifica e Avvia Eliminatorie</button>
+        </div>
+        
+        <div id="standings-section" class="bg-gray-700 p-4 rounded-lg shadow-lg hidden">
+            <h2 class="text-2xl font-bold mb-3">3. Classifica Generale (Post-Gironi)</h2>
+            <div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead><tr class="bg-gray-800"><th class="p-2">Pos</th><th>Nome</th><th>V/I</th><th>DIFF</th><th>SDC</th><th>MCS</th></tr></thead><tbody id="standings-body"></tbody></table></div>
+        </div>
+        
+        <div id="elimination-section" class="bg-gray-700 p-4 rounded-lg shadow-lg hidden">
+            <h2 id="elimination-round-title" class="text-2xl font-bold mb-3">4. Fase a Eliminazione Diretta</h2>
+            <div id="elimination-matches-container" class="space-y-2"></div>
+        </div>
+        
+        <div id="podium-section" class="bg-gray-900 border-2 border-yellow-400 p-6 rounded-lg shadow-xl hidden text-center">
+            <h2 class="text-3xl font-bold mb-4 text-yellow-300">🏆 Podio Finale 🏆</h2>
+            <div class="space-y-3 text-2xl">
+                <p>🥇 <strong id="podium-gold"></strong> (Oro)</p>
+                <p>🥈 <strong id="podium-silver"></strong> (Argento)</p>
+                <p>🥉 <strong id="podium-bronze1"></strong> (Bronzo)</p>
+                <p>🥉 <strong id="podium-bronze2"></strong> (Bronzo)</p>
+            </div>
+        </div>
+
+        <div id="final-standings-section" class="bg-gray-700 p-4 rounded-lg shadow-lg hidden">
+            <h2 class="text-2xl font-bold mb-3">5. Classifica Generale Finale</h2>
+            <div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead><tr class="bg-gray-800"><th class="p-2">Pos</th><th>Nome</th><th>V/I</th><th>DIFF</th><th>SDC</th><th>MCS</th></tr></thead><tbody id="final-standings-body"></tbody></table></div>
+        </div>
+
+        <div class="mt-auto pt-4 space-y-2">
+            <button onclick="resetTournament()" class="w-full bg-red-700 hover:bg-red-800 text-white font-bold py-3 px-4 rounded-lg text-lg shadow-lg">Resetta Tutta la Gara</button>
+            <button onclick="backToMenu()" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg text-lg shadow-lg">Torna al Menu</button>
+        </div>
+    </div>
+    
+    <div id="settings-screen" class="hidden min-h-screen flex flex-col items-center justify-center p-4">
+        <div class="w-full max-w-md bg-gray-700 p-6 rounded-lg shadow-xl">
+            <h1 class="text-3xl font-bold mb-6 text-center">Impostazioni</h1>
+            
+            <div class="mb-4">
+                <label for="default-time-minutes" class="block text-lg mb-2">Tempo predefinito (minuti):</label>
+                <input type="number" id="default-time-minutes" class="w-full bg-gray-800 rounded-md p-2 text-white text-center text-2xl border border-gray-600" min="0">
+            </div>
+            <div class="mb-6">
+                <label for="default-time-seconds" class="block text-lg mb-2">Tempo predefinito (secondi):</label>
+                <input type="number" id="default-time-seconds" class="w-full bg-gray-800 rounded-md p-2 text-white text-center text-2xl border border-gray-600" min="0" max="59">
+            </div>
+
+            <div class="border-t border-gray-600 my-6"></div>
+            <div class="mb-6">
+                <label for="tournament-id-input" class="block text-lg mb-2">Cambia o Unisciti a una Gara:</label>
+                <div class="flex gap-2">
+                    <input type="text" id="tournament-id-input" class="w-full bg-gray-800 rounded-md p-2 text-white border border-gray-600" placeholder="Inserisci ID Gara...">
+                    <button onclick="changeTournamentId()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md">Vai</button>
+                </div>
+            </div>
+            
+            <div class="space-y-3">
+                <button onclick="saveSettings()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg text-xl shadow-lg">Salva Impostazioni</button>
+                <button onclick="backToMenu()" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg text-xl shadow-lg">Indietro</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Importa le funzioni di Firebase SDK
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+        // ✅✅✅ CREDENZIALI FIREBASE INSERITE CORRETTAMENTE ✅✅✅
+        const firebaseConfig = {
+            apiKey: "AIzaSyA8_TH3ilsOCNycCDrNDKNqhYz0ND0_EG4",
+            authDomain: "segnapunti-hema.firebaseapp.com",
+            projectId: "segnapunti-hema",
+            storageBucket: "segnapunti-hema.appspot.com",
+            messagingSenderId: "695317895014",
+            appId: "1:695317895014:web:14d9abea00d842da505aa7",
+            measurementId: "G-8KPKQXVHRD"
+        };
+        
+        let db;
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            document.getElementById('connection-status').textContent = 'Connected to Firebase';
+            document.getElementById('connection-status').style.color = '#4ade80'; // Verde
+        } catch (e) {
+            console.error("Firebase initialization failed:", e);
+            document.getElementById('connection-status').textContent = 'Firebase initialization failed. Check your config.';
+            document.getElementById('connection-status').style.color = '#f87171'; // Rosso
+        }
+
+        // --------- STATO GLOBALE E VARIABILI ---------
+        let timerInterval = null;
+        let soundSynth = null, soundBeep = null;
+        const initialMatchState = { score1: 0, score2: 0, yellowCards1: 0, redCards1: 0, yellowCards2: 0, redCards2: 0, blackCardFor: 0, doubleHits: 0, timeLeft: 120, timerRunning: false, priority: 0, isTournamentMatch: false, matchOver: false, matchData: {} };
+        let matchState = { ...initialMatchState };
+        let tournamentState = {}; // Questo verrà popolato da Firebase
+        let defaultTime = localStorage.getItem('defaultFencingTime') ? parseInt(localStorage.getItem('defaultFencingTime')) : 120;
+        matchState.timeLeft = defaultTime;
+        let tournamentDocRef;
+        let unsubscribeFromTournament; // Funzione per smettere di ascoltare
+        const DOM = { 
+            timerDisplay: document.querySelector('.timer-display'), 
+            modal: document.getElementById('modal'), 
+            mainMenuScreen: document.getElementById('main-menu-screen'), 
+            matchScreen: document.getElementById('match-screen'), 
+            tournamentScreen: document.getElementById('tournament-screen'), 
+            settingsScreen: document.getElementById('settings-screen') 
+        };
+        
+        // --------- GESTIONE FIREBASE E SINCRONIZZAZIONE ---------
+        async function updateFirebaseState() {
+            if (!tournamentDocRef) {
+                console.error("Riferimento al documento del torneo non disponibile. Impossibile salvare.");
+                showModal("Errore di Connessione", "Impossibile salvare i dati. Controlla la connessione e la configurazione di Firebase.");
+                return;
+            }
+            try {
+                await setDoc(tournamentDocRef, tournamentState);
+                console.log("Stato del torneo aggiornato su Firebase.");
+            } catch (error) {
+                console.error("Errore durante il salvataggio su Firebase: ", error);
+                showModal("Errore di Salvataggio", `Non è stato possibile salvare le modifiche. Errore: ${error.message}`);
+            }
+        }
+        
+        async function setupFirestoreListener(appId) {
+            if (unsubscribeFromTournament) unsubscribeFromTournament();
+
+            const tournamentId = `hema-csen-tournament-${appId}`;
+            document.getElementById('tournament-id-display').textContent = appId;
+            tournamentDocRef = doc(db, "tournaments", tournamentId);
+
+            try {
+                const docSnap = await getDoc(tournamentDocRef);
+                if (!docSnap.exists()) {
+                     console.log("Documento non esistente! Ne creo uno nuovo.");
+                     await setDoc(tournamentDocRef, getInitialTournamentState());
+                }
+
+                unsubscribeFromTournament = onSnapshot(tournamentDocRef, (doc) => {
+                    const source = doc.metadata.hasPendingWrites ? "Local" : "Server";
+                    console.log(`Dati ricevuti da: ${source}`);
+                    if (doc.exists()) {
+                        tournamentState = doc.data();
+                        renderTournamentUI();
+                    } else {
+                        console.log("Il documento è stato eliminato, ne creo uno nuovo.");
+                        resetTournament(true); // Re-inizializza se il documento viene cancellato
+                    }
+                }, (error) => {
+                    console.error("Errore nel listener di onSnapshot: ", error);
+                    document.getElementById('connection-status').textContent = 'Errore di connessione. Controlla le regole di Firestore.';
+                });
+            } catch (error) {
+                 console.error("Setup di Firestore fallito:", error);
+                 document.getElementById('connection-status').textContent = 'Setup di Firestore fallito. Sei offline?';
+            }
+        }
+
+        const getInitialTournamentState = () => ({ players: [], phase: 'setup', poules: [], standings: [], elimination: { rounds: {}, final: null }, podium: {}, finalStandings: [], activeMatchId: null });
+
+        // --------- GESTIONE NAVIGAZIONE, MODALI, SUONI, VIBRAZIONE ---------
+        const showScreen = id => {
+            const screenId = `${id}-screen`;
+            Object.values(DOM).forEach(el => {
+                if (el && el.id) el.id === screenId ? el.classList.remove('hidden') : el.classList.add('hidden');
+            });
+        };
+        function showModal(title, body) { DOM.modal.querySelector('#modal-title').innerText = title; DOM.modal.querySelector('#modal-body').innerText = body; DOM.modal.classList.remove('hidden'); }
+        DOM.modal.querySelector('#modal-close-btn').onclick = () => DOM.modal.classList.add('hidden');
+        const triggerVibration = p => { if ('vibrate' in navigator) navigator.vibrate(p); };
+        function initSounds() { if (!soundSynth) { Tone.start(); soundSynth = new Tone.Synth().toDestination(); soundBeep = new Tone.Oscillator('C5', "sine").toDestination(); } }
+
+        // ✅ LOGICA AGGIORNATA CON CONFERMA DI INGRESSO
+        async function showMatchScreen(isTournament = false, matchData = {}) {
+            if (isTournament) {
+                const isAlreadyActive = tournamentState.activeMatchId && tournamentState.activeMatchId === matchData.matchId;
+                
+                if (isAlreadyActive) {
+                    if (!confirm("Questo incontro è già in corso. Vuoi forzare l'ingresso e prendere il controllo? (Fallo solo se il dispositivo originale si è disconnesso)")) {
+                        return; // L'utente ha annullato, non fare nulla.
+                    }
+                }
+                
+                tournamentState.activeMatchId = matchData.matchId;
+                updateFirebaseState();
+            }
+
+            resetMatch(false);
+            matchState.isTournamentMatch = isTournament;
+            matchState.matchData = matchData;
+            
+            const matchFooter = document.getElementById('match-footer');
+            const matchInfo = document.getElementById('match-info');
+            
+            if (isTournament) {
+                document.getElementById('player1-name').textContent = matchData.player1;
+                document.getElementById('player2-name').textContent = matchData.player2;
+                matchInfo.textContent = matchData.roundInfo;
+                matchInfo.classList.remove('hidden');
+                matchFooter.innerHTML = `<button onclick="saveTournamentMatch()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg text-lg shadow-lg">Salva Risultato</button>`;
+            } else {
+                document.getElementById('player1-name').textContent = 'Schermidore 1';
+                document.getElementById('player2-name').textContent = 'Schermidore 2';
+                matchInfo.classList.add('hidden');
+                matchFooter.innerHTML = `<button onclick="backToMenu()" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg text-lg shadow-lg">Torna al Menu</button>`;
+            }
+            showScreen('match');
+        }
+        
+        function showSettingsScreen() {
+            const m = Math.floor(defaultTime / 60);
+            const s = defaultTime % 60;
+            document.getElementById('default-time-minutes').value = m;
+            document.getElementById('default-time-seconds').value = s;
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const currentGaraId = urlParams.get('gara');
+            if (currentGaraId) {
+                document.getElementById('tournament-id-input').value = currentGaraId;
+            }
+
+            showScreen('settings');
+        }
+
+        function showTournamentScreen() {
+            const urlParams = new URLSearchParams(window.location.search);
+            let appId = urlParams.get('gara');
+
+            if (!appId) {
+                appId = prompt("Crea un ID unico per questa gara (es. 'gara-csen-milano-2025').\nQuesto ID servirà per collegare gli altri dispositivi.", '');
+                
+                if (!appId || appId.trim() === '') {
+                    alert("È necessario un ID per avviare o gestire una gara.");
+                    return;
+                }
+                window.location.href = window.location.pathname + '?gara=' + encodeURIComponent(appId.trim());
+                return;
+            }
+            
+            setupFirestoreListener(appId);
+            showScreen('tournament');
+        }
+
+        // --------- LOGICA INCONTRO ---------
+        const formatTime = s => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
+        function updateScore(p, d) { if (matchState.matchOver) return; matchState[`score${p}`] = Math.max(0, matchState[`score${p}`] + d); renderMatch(); }
+        
+        function giveCard(p, c) {
+            if (matchState.matchOver) return;
+            const opp = p === 1 ? 2 : 1;
+            if (c === 'yellow') {
+                matchState[`yellowCards${p}`]++;
+                if (matchState[`yellowCards${p}`] === 2) {
+                    matchState[`yellowCards${p}`] = 0;
+                    showModal('Secondo Giallo!', `Cartellino rosso per schermidore ${p}.`);
+                    giveCard(p, 'red');
+                }
+            } else if (c === 'red') {
+                showModal('Cartellino Rosso!', `2 punti per schermidore ${opp}.`);
+                updateScore(opp, 2);
+                matchState[`redCards${p}`]++;
+                if (matchState[`redCards${p}`] === 2) {
+                    matchState.blackCardFor = p;
+                    endMatch('black_card');
+                }
+            }
+            renderMatch();
+        }
+
+        function addDoubleHit() { if (matchState.matchOver) return; matchState.doubleHits++; if (matchState.doubleHits === 3) { endMatch('double_hit'); } renderMatch(); }
+        function adjustTime(sec) { if (matchState.timerRunning) return; matchState.timeLeft = Math.max(0, matchState.timeLeft + sec); renderMatch(); }
+        
+        function assignPriority() {
+            if (matchState.matchOver) return;
+            matchState.priority = Math.floor(Math.random() * 2) + 1;
+            matchState.timeLeft = 60; // SEMPRE 1 minuto
+            showModal('Priorità Assegnata!', `Priorità a schermidore ${matchState.priority}. Il tempo è stato impostato a 1 minuto.`);
+            renderMatch();
+        }
+
+        function endMatch(reason) {
+            stopTimer();
+            matchState.matchOver = true;
+            if (reason === 'black_card') {
+                const winner = matchState.blackCardFor === 1 ? 2 : 1;
+                const loser = matchState.blackCardFor;
+                matchState[`score${winner}`] = 8;
+                matchState[`score${loser}`] = 0;
+                showModal('Cartellino Nero!', `Vittoria per schermidore ${winner} per 8-0.`);
+            } else if (reason === 'double_hit') {
+                matchState.score1 = 8;
+                matchState.score2 = 8;
+                matchState.matchData.doubleHitLoss1 = true;
+                matchState.matchData.doubleHitLoss2 = true;
+                showModal('3° Colpo Doppio!', `Sconfitta per entrambi. Punteggio: 8-8.`);
+            }
+            renderMatch();
+        }
+
+        function toggleTimer() { if (matchState.matchOver) return; initSounds(); if (matchState.timerRunning) stopTimer(); else startTimer(); soundBeep.start().stop("+0.05"); DOM.timerDisplay.classList.add('timer-flash'); setTimeout(() => DOM.timerDisplay.classList.remove('timer-flash'), 150); }
+        function startTimer() { if (matchState.timeLeft <= 0) return; matchState.timerRunning = true; timerInterval = setInterval(() => { matchState.timeLeft--; if (matchState.timeLeft <= 0) { matchState.timeLeft = 0; stopTimer(); handleTimerEnd(); } renderMatch(); }, 1000); }
+        function stopTimer() { if (matchState.timerRunning && matchState.timeLeft <= 5 && matchState.timeLeft > 0) { const o = document.getElementById('last-action-overlay'); triggerVibration([150, 100, 150]); o.classList.remove('hidden'); setTimeout(() => o.classList.add('hidden'), 2500); } matchState.timerRunning = false; clearInterval(timerInterval); }
+        function handleTimerEnd() { initSounds(); soundSynth.triggerAttackRelease("C5", "3s"); document.body.classList.add('flashing-red'); triggerVibration([500, 200, 500]); setTimeout(() => document.body.classList.remove('flashing-red'), 3000); matchState.matchOver = true; if (matchState.score1 === matchState.score2 && matchState.priority > 0) { matchState[`score${matchState.priority}`]++; showModal('Tempo Scaduto!', `Vince schermidore ${matchState.priority} per priorità.`); } renderMatch(); }
+        function resetMatch(fullReset = true) { stopTimer(); const oldData = { ...matchState.matchData }; matchState = { ...initialMatchState, matchData: oldData, timeLeft: defaultTime }; renderMatch(); }
+        
+        function renderMatch() {
+            document.getElementById('score-display-1').textContent = matchState.score1;
+            document.getElementById('score-display-2').textContent = matchState.score2;
+            DOM.timerDisplay.textContent = formatTime(matchState.timeLeft);
+            document.getElementById('priority-display-1').classList.toggle('hidden', matchState.priority !== 1);
+            document.getElementById('priority-display-2').classList.toggle('hidden', matchState.priority !== 2);
+            document.getElementById('double-hit-count').textContent = matchState.doubleHits;
+            for(let p=1; p<=2; p++){
+                ['yellow', 'red'].forEach(color => {
+                    const btn = document.getElementById(`card-${color.charAt(0)}-${p}`);
+                    if (btn) {
+                        let countEl = btn.querySelector('.card-count');
+                        const count = matchState[`${color}Cards${p}`];
+                        if (count > 0) {
+                            if (!countEl) { countEl = document.createElement('div'); countEl.className = 'card-count'; btn.appendChild(countEl); }
+                            countEl.textContent = count;
+                        } else if (countEl) { btn.removeChild(countEl); }
+                    }
+                });
+            }
+        }
+
+        // --------- GESTIONE GARA ---------
+        function addPlayer() { 
+            const input = document.getElementById('new-player-name'); 
+            const name = input.value.trim(); 
+            if (name && tournamentState.players && !tournamentState.players.includes(name)) { 
+                tournamentState.players.push(name); 
+                input.value = ''; 
+                updateFirebaseState();
+            } 
+        }
+        function startTournament() { 
+            if (tournamentState.players.length < 4) return showModal("Errore", "Aggiungi almeno 4 schermidori per una gara."); 
+            tournamentState.phase = 'poules'; 
+            createPoules(); 
+            updateFirebaseState();
+        }
+        
+        function createPoules() {
+            let shuffled = [...tournamentState.players].sort(() => 0.5 - Math.random());
+            let numPlayers = shuffled.length;
+            let numPoules = Math.floor(numPlayers / 7) + (numPlayers % 7 > 0 ? 1 : 0);
+            if (numPlayers % 7 < 4 && numPlayers % 7 !== 0 && numPoules > 1) { numPoules = Math.floor(numPlayers/6) + (numPlayers % 6 > 0 ? 1:0); }
+            tournamentState.poules = Array.from({ length: numPoules }, () => ({ players: [], matches: [] }));
+            for (let i = 0; i < numPlayers; i++) { tournamentState.poules[i % numPoules].players.push(shuffled[i]); }
+            tournamentState.poules.forEach((poule, pouleIndex) => {
+                poule.matches = [];
+                for (let i = 0; i < poule.players.length; i++) {
+                    for (let j = i + 1; j < poule.players.length; j++) {
+                        poule.matches.push({ id: `p${pouleIndex}m${poule.matches.length}`, player1: poule.players[i], player2: poule.players[j], score1: 0, score2: 0, status: 'pending', doubleHitLoss1: false, doubleHitLoss2: false });
+                    }
+                }
+            });
+        }
+
+        function startElimination() { 
+            calculateStandings(); 
+            tournamentState.phase = 'elimination'; 
+            generateEliminationBracket(); 
+            updateFirebaseState();
+        }
+        
+        function calculateStandings() {
+            const stats = {};
+            tournamentState.players.forEach(p => { stats[p] = { name: p, M: 0, V: 0, SDC: 0, BS: 0, BR: 0 }; });
+            tournamentState.poules.forEach(poule => poule.matches.forEach(m => {
+                if (m.status !== 'completed') return;
+                stats[m.player1].M++; stats[m.player2].M++;
+                stats[m.player1].BS += m.score1; stats[m.player1].BR += m.score2;
+                stats[m.player2].BS += m.score2; stats[m.player2].BR += m.score1;
+                if(m.score1 > m.score2) stats[m.player1].V++; else if (m.score2 > m.score1) stats[m.player2].V++;
+                if(m.doubleHitLoss1) stats[m.player1].SDC++;
+                if(m.doubleHitLoss2) stats[m.player2].SDC++;
+            }));
+            let standings = Object.values(stats);
+            standings.forEach(s => { s.ratio = s.M > 0 ? (s.V / s.M) : 0; s.diff = s.BS - s.BR; });
+            standings.sort((a, b) => b.ratio - a.ratio || b.diff - a.diff || a.SDC - b.SDC || a.BR - b.BR || 0.5 - Math.random());
+            tournamentState.standings = standings;
+        }
+
+        function generateEliminationBracket() {
+            const allQualified = tournamentState.standings;
+            let size = 2;
+            while (size * 2 <= allQualified.length) { size *= 2; }
+            const qualified = allQualified.slice(0, size);
+            if (qualified.length < 2) return;
+            const round = [];
+            for(let i = 0; i < qualified.length / 2; i++) {
+                const player1 = qualified[i];
+                const player2 = qualified[qualified.length - 1 - i];
+                round.push({ id: `e0m${i}`, player1: player1.name, player2: player2.name, winner: null, status: 'pending', score1: 0, score2: 0, roundIndex: '0' });
+            }
+            tournamentState.elimination.rounds = { '0': round };
+        }
+
+        async function saveTournamentMatch() {
+            const { type, roundIndex, pouleIndex, matchId } = matchState.matchData;
+            
+            if (type === 'final_assault') {
+                const final = tournamentState.elimination.final;
+                const winner = matchState.score1 > matchState.score2 ? final.player1 : final.player2;
+                final.assaults.push({ score1: matchState.score1, score2: matchState.score2, winner: winner });
+
+                const wins1 = final.assaults.filter(a => a.winner === final.player1).length;
+                const wins2 = final.assaults.filter(a => a.winner === final.player2).length;
+
+                if (wins1 === 2 || wins2 === 2) {
+                    final.winner = wins1 === 2 ? final.player1 : final.player2;
+                    tournamentState.phase = 'podium';
+                    const silver = final.winner === final.player1 ? final.player2 : final.player1;
+                    tournamentState.podium = { gold: final.winner, silver: silver, bronze1: final.losers[0], bronze2: final.losers[1]};
+                    calculateFinalStandings();
+                }
+            } else {
+                let match = type === 'poule' 
+                    ? tournamentState.poules[pouleIndex].matches.find(m => m.id === matchId)
+                    : tournamentState.elimination.rounds[roundIndex].find(m => m.id === matchId);
+
+                if(!match) return;
+                match.score1 = matchState.score1; match.score2 = matchState.score2; match.status = 'completed';
+                if(matchState.matchData.doubleHitLoss1) match.doubleHitLoss1 = true; if(matchState.matchData.doubleHitLoss2) match.doubleHitLoss2 = true;
+
+                if (type === 'elimination') {
+                    match.winner = match.score1 > matchState.score2 ? match.player1 : match.player2;
+                    checkEliminationRoundCompletion();
+                }
+            }
+
+            if (tournamentState.activeMatchId === matchId) {
+                tournamentState.activeMatchId = null;
+            }
+            
+            await updateFirebaseState();
+            showTournamentScreen();
+        }
+
+        function checkEliminationRoundCompletion() {
+            const roundKeys = Object.keys(tournamentState.elimination.rounds);
+            if (roundKeys.length === 0) return;
+            
+            const currentRoundIndex = roundKeys.sort((a,b) => parseInt(b) - parseInt(a))[0]; // Prende l'ultimo girone
+            const currentRound = tournamentState.elimination.rounds[currentRoundIndex];
+
+            if (currentRound.every(m => m.status === 'completed')) {
+                const winners = currentRound.map(m => m.winner);
+                if (winners.length === 2) { // Semifinale completata
+                    const losers = currentRound.flatMap(m => [m.player1, m.player2]).filter(p => !winners.includes(p));
+                    tournamentState.elimination.final = { player1: winners[0], player2: winners[1], assaults: [], winner: null, losers: losers };
+                } else if (winners.length > 1) { // Altro turno completato
+                    const nextRound = [];
+                    const nextRoundIndex = String(parseInt(currentRoundIndex) + 1);
+                    for(let i=0; i<winners.length/2; i++) {
+                        nextRound.push({ id: `e${nextRoundIndex}m${i}`, player1: winners[i*2], player2: winners[i*2+1], winner: null, status: 'pending', score1: 0, score2: 0, roundIndex: nextRoundIndex });
+                    }
+                    tournamentState.elimination.rounds[nextRoundIndex] = nextRound;
+                }
+            }
+        }
+        
+        function calculateFinalStandings() {
+            let allPlayersStats = JSON.parse(JSON.stringify(tournamentState.standings));
+            const final = tournamentState.elimination.final;
+            const finalAssaultsAsMatches = final ? final.assaults.map(a => ({...a, player1: final.player1, player2: final.player2, status: 'completed'})) : [];
+            const allMatches = [...tournamentState.poules.flatMap(p => p.matches), ...Object.values(tournamentState.elimination.rounds).flatMap(r => r), ...finalAssaultsAsMatches];
+
+            allPlayersStats.forEach(stat => {
+                stat.M = 0; stat.V = 0; stat.SDC = 0; stat.BS = 0; stat.BR = 0;
+                allMatches.filter(m => m.status === 'completed' && (m.player1 === stat.name || m.player2 === stat.name)).forEach(m => {
+                    const isP1 = m.player1 === stat.name;
+                    const myScore = isP1 ? m.score1 : m.score2;
+                    const oppScore = isP1 ? m.score2 : m.score1;
+                    stat.M++; stat.BS += myScore; stat.BR += oppScore;
+                    if(myScore > oppScore) stat.V++;
+                    if((isP1 && m.doubleHitLoss1) || (!isP1 && m.doubleHitLoss2)) stat.SDC++;
+                });
+                stat.ratio = stat.M > 0 ? (stat.V / stat.M) : 0;
+                stat.diff = stat.BS - stat.BR;
+            });
+            
+            const finalRanking = [];
+            const {gold, silver, bronze1, bronze2} = tournamentState.podium;
+            if (gold) [gold, silver, bronze1, bronze2].forEach(p => finalRanking.push(p));
+            const rankedNames = new Set(finalRanking);
+            
+            if (tournamentState.elimination && tournamentState.elimination.rounds) {
+                const roundKeys = Object.keys(tournamentState.elimination.rounds).sort((a,b) => parseInt(a) - parseInt(b));
+                for (let i = roundKeys.length - 2; i >= 0; i--) {
+                    const currentRoundKey = roundKeys[i];
+                    const nextRoundKey = roundKeys[i+1];
+                    const round = tournamentState.elimination.rounds[currentRoundKey];
+                    const nextRound = tournamentState.elimination.rounds[nextRoundKey];
+
+                    let winnersInNextRound = (i === roundKeys.length - 2)
+                        ? new Set(final ? [final.player1, final.player2] : [])
+                        : new Set(nextRound?.flatMap(m => [m.player1, m.player2]));
+                    
+                    const losers = round.flatMap(m => [m.player1, m.player2]).filter(p => !winnersInNextRound.has(p));
+                    const sortedLosers = losers.sort((a,b) => tournamentState.standings.findIndex(s => s.name === a) - tournamentState.standings.findIndex(s => s.name === b));
+                    sortedLosers.forEach(l => { if(!rankedNames.has(l)) { finalRanking.push(l); rankedNames.add(l); }});
+                }
+            }
+
+            tournamentState.standings.forEach(s => { if(!rankedNames.has(s.name)) finalRanking.push(s.name); });
+            tournamentState.finalStandings = finalRanking.map(name => allPlayersStats.find(s => s.name === name)).filter(Boolean);
+        }
+
+        function renderTournamentUI() {
+            if (!tournamentState || Object.keys(tournamentState).length === 0) return;
+            
+            const { phase, activeMatchId } = tournamentState;
+            ['player-setup', 'poules', 'standings', 'elimination', 'podium', 'final-standings'].forEach(s => document.getElementById(`${s}-section`).classList.add('hidden'));
+            if(phase === 'setup' || phase === 'poules') document.getElementById('player-setup-section').classList.remove('hidden');
+            if(['poules', 'elimination', 'standings', 'podium'].includes(phase)) document.getElementById('poules-section').classList.remove('hidden');
+            if(['elimination', 'standings', 'podium'].includes(phase)) document.getElementById('standings-section').classList.remove('hidden');
+            if(['elimination', 'podium'].includes(phase)) document.getElementById('elimination-section').classList.remove('hidden');
+            if(phase === 'podium') { document.getElementById('podium-section').classList.remove('hidden'); document.getElementById('final-standings-section').classList.remove('hidden'); }
+
+            if(phase === 'setup') {
+                document.getElementById('player-list').innerHTML = tournamentState.players.map(p => `<div class="p-2 bg-gray-800 rounded">${p}</div>`).join('');
+            }
+            if(phase === 'poules' && tournamentState.poules) {
+                const poulesContainer = document.getElementById('poules-container');
+                poulesContainer.innerHTML = tournamentState.poules.map((poule, index) => `
+                    <div class="bg-gray-800 p-3 rounded">
+                        <h3 class="font-bold text-lg mb-2">Girone ${index + 1}</h3>
+                        ${poule.matches.map(m => {
+                            const isThisMatchActive = activeMatchId === m.id;
+
+                            let btnClass = 'bg-blue-600 hover:bg-blue-700';
+                            let btnText = m.status === 'completed' ? 'Rigioca' : 'Disputa';
+
+                            if (isThisMatchActive) {
+                                btnClass = 'bg-red-700 hover:bg-red-600';
+                                btnText = 'In Corso';
+                            }
+                            
+                            return `<div class="flex justify-between items-center p-2">
+                                <span>${m.player1} vs ${m.player2}</span>
+                                <span>${m.status === 'completed' ? `${m.score1}-${m.score2}` : ''}</span>
+                                <button onclick='showMatchScreen(true, {type: "poule", pouleIndex: ${index}, matchId: "${m.id}", player1: "${m.player1}", player2: "${m.player2}", roundInfo: "Girone ${index + 1}"})' class="${btnClass} text-xs px-2 py-1 rounded">${btnText}</button>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                `).join('');
+                const allPoulesFinished = tournamentState.poules.length > 0 && tournamentState.poules.every(p => p.matches.every(m => m.status === 'completed'));
+                document.getElementById('start-elimination-btn').classList.toggle('hidden', !allPoulesFinished);
+            }
+            if(['standings', 'elimination', 'podium'].includes(phase) && tournamentState.standings) { document.getElementById('standings-body').innerHTML = tournamentState.standings.map((s,i) => `<tr><td class="p-2">${i+1}</td><td>${s.name}</td><td>${s.ratio.toFixed(2)}</td><td>${s.diff}</td><td>${s.SDC}</td><td>${s.BR}</td></tr>`).join(''); }
+            
+            if(['elimination', 'podium'].includes(phase) && tournamentState.elimination && tournamentState.elimination.rounds) {
+                 let elimHTML = Object.entries(tournamentState.elimination.rounds)
+                    .sort((a, b) => parseInt(a[0]) - parseInt(b[0])) // Ordina i gironi per chiave numerica
+                    .map(([roundIndex, round]) => {
+                        let title = `Turno (${round.length * 2} atleti)`;
+                        if (round.length === 2) title = "Semifinali";
+                        else if (round.length === 4) title = "Quarti di Finale";
+                        else if (round.length === 8) title = "Ottavi di Finale";
+                        return `<div class="mb-4">
+                            <h4 class="font-bold text-md mb-1">${title}</h4>
+                            ${round.map(m => {
+                                const isThisMatchActive = activeMatchId === m.id;
+                                let btnHTML = '';
+
+                                if (m.status === 'completed') {
+                                    btnHTML = `<span class="text-green-400 text-xs">Vince: ${m.winner}</span>`;
+                                } else {
+                                    let btnClass = 'bg-blue-600 hover:bg-blue-700';
+                                    let btnText = 'Disputa';
+
+                                    if (isThisMatchActive) {
+                                        btnClass = 'bg-red-700 hover:bg-red-600';
+                                        btnText = 'In Corso';
+                                    }
+                                    btnHTML = `<button onclick='showMatchScreen(true, {type: "elimination", roundIndex: "${roundIndex}", matchId: "${m.id}", player1: "${m.player1}", player2: "${m.player2}", roundInfo: "${title}"})' class="${btnClass} text-xs px-2 py-1 rounded">${btnText}</button>`;
+                                }
+
+                                return `<div class="flex justify-between items-center p-2 bg-gray-800 rounded">
+                                    <span>${m.player1} vs ${m.player2}</span>
+                                    <span>${m.status === 'completed' ? `${m.score1}-${m.score2}` : ''}</span>
+                                    ${btnHTML}
+                                </div>`;
+                            }).join('')}
+                        </div>`;
+                    }).join('');
+                
+                const final = tournamentState.elimination.final;
+                if (final) {
+                    let finalHTML = `<div class="mb-4"><h4 class="font-bold text-md mb-1">Finale</h4>`;
+                    final.assaults.forEach((a, i) => { finalHTML += `<div class="flex justify-between items-center p-2 bg-gray-800 rounded"><span>(Assalto ${i+1}) ${final.player1} vs ${final.player2}</span><span class="font-bold">${a.score1} - ${a.score2}</span></div>`; });
+                    const wins1 = final.assaults.filter(a => a.winner === final.player1).length;
+                    const wins2 = final.assaults.filter(a => a.winner === final.player2).length;
+                    
+                    if (!final.winner) {
+                        const assaultNum = final.assaults.length + 1;
+                        const matchId = `final_assault_${assaultNum}`;
+                        const isThisMatchActive = activeMatchId === matchId;
+                        
+                        let btnClass = 'bg-blue-600 hover:bg-blue-700';
+                        let btnText = 'Disputa';
+
+                        if (isThisMatchActive) {
+                            btnClass = 'bg-red-700 hover:bg-red-600';
+                            btnText = 'In Corso';
+                        }
+
+                        finalHTML += `<div class="flex justify-between items-center p-2 bg-gray-900 rounded">
+                            <span class="flex-1 text-left">(Assalto ${assaultNum}) ${final.player1} vs ${final.player2}</span>
+                            <span class="font-bold text-yellow-300 mx-4">${wins1} - ${wins2}</span>
+                            <button onclick='showMatchScreen(true, {type: "final_assault", matchId: "${matchId}", player1: "${final.player1}", player2: "${final.player2}", roundInfo: "Finale (Assalto ${assaultNum})"})' class="${btnClass} text-xs px-2 py-1 rounded">${btnText}</button>
+                        </div>`;
+                    } else { finalHTML += `<div class="text-center p-2 text-green-400 font-bold">Vincitore: ${final.winner} (${wins1}-${wins2})</div>`; }
+                    elimHTML += `${finalHTML}</div>`;
+                }
+                document.getElementById('elimination-matches-container').innerHTML = elimHTML;
+            }
+
+            if(phase === 'podium' && tournamentState.podium) {
+                document.getElementById('podium-gold').textContent = tournamentState.podium.gold || '';
+                document.getElementById('podium-silver').textContent = tournamentState.podium.silver || '';
+                document.getElementById('podium-bronze1').textContent = tournamentState.podium.bronze1 || '';
+                document.getElementById('podium-bronze2').textContent = tournamentState.podium.bronze2 || '';
+                if(tournamentState.finalStandings) {
+                    document.getElementById('final-standings-body').innerHTML = tournamentState.finalStandings.map((s,i) => `<tr><td class="p-2">${i+1}</td><td>${s.name}</td><td>${s.ratio.toFixed(2)}</td><td>${s.diff}</td><td>${s.SDC}</td><td>${s.BR}</td></tr>`).join('');
+                }
+            }
+        }
+
+        async function resetTournament(force = false) { 
+            if (force || confirm("Sei sicuro di voler resettare tutta la gara? I dati andranno persi per tutti i dispositivi collegati.")) { 
+                tournamentState = getInitialTournamentState();
+                await updateFirebaseState();
+            } 
+        }
+        
+        // --------- IMPOSTAZIONI E INIZIALIZZAZIONE ---------
+        async function backToMenu() { 
+            // ✅ CORREZIONE: Verifica se l'utente è attualmente nella schermata dell'incontro.
+            const isCurrentlyOnMatchScreen = !document.getElementById('match-screen').classList.contains('hidden');
+
+            if (isCurrentlyOnMatchScreen && matchState.isTournamentMatch) {
+                if (confirm("Sei sicuro di voler uscire dall'incontro? Il risultato non sarà salvato e l'incontro risulterà da disputare.")) {
+                    if (tournamentState.activeMatchId === matchState.matchData.matchId) {
+                        tournamentState.activeMatchId = null;
+                    }
+                    await updateFirebaseState();
+                    stopTimer(); 
+                    showTournamentScreen(); 
+                }
+            } else {
+                // Se l'utente si trova in qualsiasi altra schermata (gestione gara, impostazioni), torna al menu principale.
+                stopTimer(); // Sicurezza: ferma il timer se per caso fosse attivo.
+                showScreen('main-menu');
+            }
+        }
+
+        function changeTournamentId() {
+            const input = document.getElementById('tournament-id-input');
+            const newId = input.value.trim();
+            if (!newId) {
+                showModal("Errore", "Per favore, inserisci un ID per la gara.");
+                return;
+            }
+            window.location.href = window.location.pathname + '?gara=' + encodeURIComponent(newId);
+        }
+
+        function saveSettings() { 
+            const m = parseInt(document.getElementById('default-time-minutes').value) || 0; 
+            const s = parseInt(document.getElementById('default-time-seconds').value) || 0; 
+            defaultTime = (m*60)+s; 
+            localStorage.setItem('defaultFencingTime', defaultTime); 
+            matchState.timeLeft = defaultTime; 
+            showModal("Impostazioni", "Impostazioni salvate!");
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            window.showMatchScreen = showMatchScreen;
+            window.showTournamentScreen = showTournamentScreen;
+            window.showSettingsScreen = showSettingsScreen;
+            window.adjustTime = adjustTime;
+            window.toggleTimer = toggleTimer;
+            window.assignPriority = assignPriority;
+            window.addDoubleHit = addDoubleHit;
+            window.resetMatch = resetMatch;
+            window.updateScore = updateScore;
+            window.giveCard = giveCard;
+            window.addPlayer = addPlayer;
+            window.startTournament = startTournament;
+            window.startElimination = startElimination;
+            window.resetTournament = resetTournament;
+            window.saveSettings = saveSettings;
+            window.backToMenu = backToMenu;
+            window.changeTournamentId = changeTournamentId;
+            window.saveTournamentMatch = saveTournamentMatch;
+
+            document.getElementById('new-player-name').addEventListener('keyup', (event) => {
+                if (event.key === 'Enter') { event.preventDefault(); addPlayer(); }
+            });
+            showScreen('main-menu');
+        });
+    </script>
+</body>
+</html>
+Ver 1.0 - Programmato da Ghirotto Andrea per uso personale - 2025
